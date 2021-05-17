@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <FastLED.h>
 #include <DallasTemperature.h>
-//#include <MHZ19.h>
+#include "MHZ19.h"
 #include "DHT.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -13,15 +13,13 @@ Adafruit_ADS1015 ads; /* Use thi for the 12-bit version */
 
 const int RX_PIN = 10;                      // Rx pin which the MHZ19 Tx pin is attached to
 const int TX_PIN = 11;                      // Tx pin which the MHZ19 Rx pin is attached to
-//MHZ19 *myMHZ19 = new MHZ19(RX_PIN, TX_PIN); // Constructor for library
 
-unsigned long getDataTimer = 0;
+MHZ19 myMHZ19;
+SoftwareSerial cO2serial(RX_PIN,TX_PIN);
 
 #define DHTPIN 2
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
-float humi;
-float tempC;
 
 //Temperature Probes
 #define ONE_WIRE_BUS 8
@@ -29,8 +27,8 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensorsTemp(&oneWire);
 
 //OLED define
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define SCREEN_WIDTH 100 // OLED display width, in pixels
+#define SCREEN_HEIGHT 50 // OLED display height, in pixels
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 Adafruit_SSD1306 display(4);
 
@@ -53,6 +51,7 @@ void led(int R, int G, int B)
 void setup()
 {
   Serial.begin(9600);
+  
 
   //For DHT11
   dht.begin();
@@ -62,16 +61,17 @@ void setup()
   ads.begin();
 
   //FOR CO2 Sensor
- // myMHZ19->begin(RX_PIN, TX_PIN);
- // myMHZ19->setAutoCalibration(false);
- // MHZ19 myMHZ19;                           // Constructor for library
- // SoftwareSerial mySerial(RX_PIN, TX_PIN); // (Uno example) create device to MH-Z19 serial
+    cO2serial.begin(9600);
+    myMHZ19.begin(cO2serial);
+    myMHZ19.autoCalibration();
+    
 
   //for temperature probes
-
   sensorsTemp.begin();
 
+  //for LED
   FastLED.addLeds<WS2812B, DATA_PIN, RGB>(leds, NUM_LEDS); // GRB ordering is typical
+
   //For OLED I2C
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
   { // Address 0x3D for 128x64
@@ -87,6 +87,10 @@ void setup()
 void loop()
 {
   delay(1000);
+
+  float humi;
+  float tempC;
+  
   humi = dht.readHumidity();
   tempC = dht.readTemperature();
 
@@ -97,11 +101,15 @@ void loop()
 
   sensorsTemp.requestTemperatures();
 
-//  measurement_t m = myMHZ19->getMeasurement();
+  int cO2ppm;
+  cO2ppm = myMHZ19.getCO2();
+  Serial.print("CO2 ppm is: ");
+  Serial.println(cO2ppm);
 
-  Serial.print("Temperature is: ");
+
+  Serial.print(F("Temperature is: "));
   Serial.println(sensorsTemp.getTempCByIndex(0));
-  Serial.print("Temperature is: ");
+  Serial.print(F("Temperature is: "));
   Serial.println(sensorsTemp.getTempCByIndex(1));
 
   display.clearDisplay();
@@ -110,28 +118,28 @@ void loop()
   display.setTextColor(WHITE);
 
   display.setCursor(0, 0);
-  display.print("Oxygen %");
+  display.print(F("Oxygen %"));
   display.setCursor(0, 15);
   display.print(O2perc);
 
   display.setCursor(0, 35);
-  display.print("CO2 ppm");
+  display.print(F("CO2 ppm"));
   display.setCursor(0, 50);
-//  display.print(m.co2_ppm);
+  display.print(cO2ppm);
 
-  Serial.print("CO2 is: ");
- // Serial.println(m.co2_ppm);
- // if (m.co2_ppm >= 600 && m.co2_ppm <= 1500)
+  
+ 
+ if (cO2ppm >= 600 && cO2ppm <= 1500)
   {
 
-//    led(100, 255, 0);
+    led(100, 255, 0);
   }
- // if (m.co2_ppm >= 2500)
+  if (cO2ppm >= 2500)
   {
- //   led(0, 255, 0);
+    led(0, 255, 0);
   }
-//  if (m.co2_ppm < 600)
+  if (cO2ppm < 600)
   {
- //   led(255, 0, 0);
+    led(255, 0, 0);
   }
 }
