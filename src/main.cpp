@@ -71,13 +71,14 @@ void setup()
 
   //for LED
   FastLED.addLeds<WS2812B, DATA_PIN, RGB>(leds, NUM_LEDS); // GRB ordering is typical
-
+/* 
   //For OLED I2C
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
   { // Address 0x3D for 128x64
     Serial.println(F("SSD1306 allocation failed"));
     //  for(;;);
   }
+ */
 
   display.display(); //Display logo
   delay(1000);
@@ -103,7 +104,8 @@ void loop()
 
   int cO2ppm;
   cO2ppm = myMHZ19.getCO2();
-  Serial.print("CO2 ppm is: ");
+ 
+ /*  Serial.print("CO2 ppm is: ");
   Serial.println(cO2ppm);
 
 
@@ -111,19 +113,19 @@ void loop()
   Serial.println(sensorsTemp.getTempCByIndex(0));
   Serial.print(F("Temperature is: "));
   Serial.println(sensorsTemp.getTempCByIndex(1));
-
+ */
   display.clearDisplay();
 
   display.setTextSize(2);
   display.setTextColor(WHITE);
 
   display.setCursor(0, 0);
-  display.print(F("Oxygen %"));
+  display.print("Oxygen %");
   display.setCursor(0, 15);
   display.print(O2perc);
 
   display.setCursor(0, 35);
-  display.print(F("CO2 ppm"));
+  display.print("CO2 ppm");
   display.setCursor(0, 50);
   display.print(cO2ppm);
 
