@@ -8,11 +8,13 @@
 #include <Adafruit_SSD1306.h>
 #include <SoftwareSerial.h>
 #include <Adafruit_ADS1X15.h>
+#include <U8g2lib.h>
+
 
 Adafruit_ADS1015 ads; /* Use thi for the 12-bit version */
 
-const int RX_PIN = 10;                      // Rx pin which the MHZ19 Tx pin is attached to
-const int TX_PIN = 11;                      // Tx pin which the MHZ19 Rx pin is attached to
+const int8_t RX_PIN = 10;                      // Rx pin which the MHZ19 Tx pin is attached to
+const int8_t TX_PIN = 11;                      // Tx pin which the MHZ19 Rx pin is attached to
 
 MHZ19 myMHZ19;
 SoftwareSerial cO2serial(RX_PIN,TX_PIN);
@@ -30,7 +32,9 @@ DallasTemperature sensorsTemp(&oneWire);
 #define SCREEN_WIDTH 100 // OLED display width, in pixels
 #define SCREEN_HEIGHT 50 // OLED display height, in pixels
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-Adafruit_SSD1306 display(4);
+// Adafruit_SSD1306 display(4);
+
+U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 // How many leds in your strip?
 #define NUM_LEDS 1
@@ -79,15 +83,16 @@ void setup()
     //  for(;;);
   }
  */
-
-  display.display(); //Display logo
-  delay(1000);
-  display.clearDisplay();
+  u8g2.begin();  
+ // display.display(); //Display logo
+//  delay(1000);
+ // display.clearDisplay();
 }
 
 void loop()
 {
   delay(1000);
+
 
   float humi;
   float tempC;
@@ -104,8 +109,8 @@ void loop()
 
   int cO2ppm;
   cO2ppm = myMHZ19.getCO2();
- 
- /*  Serial.print("CO2 ppm is: ");
+
+   Serial.print("CO2 ppm is: ");
   Serial.println(cO2ppm);
 
 
@@ -113,35 +118,59 @@ void loop()
   Serial.println(sensorsTemp.getTempCByIndex(0));
   Serial.print(F("Temperature is: "));
   Serial.println(sensorsTemp.getTempCByIndex(1));
- */
-  display.clearDisplay();
 
-  display.setTextSize(2);
-  display.setTextColor(WHITE);
+   
+  u8g2.firstPage();
+  do {
+    //O2 display
+    u8g2.setFont(u8g2_font_ncenB14_tr);
+    u8g2.drawStr(0,16,"O2 %");
+    u8g2.setFont(u8g2_font_ncenB10_tr);
+    u8g2.setCursor(0,35);
+    u8g2.print(O2perc);
 
-  display.setCursor(0, 0);
-  display.print("Oxygen %");
-  display.setCursor(0, 15);
-  display.print(O2perc);
+    //CO2 display
+    u8g2.setFont(u8g2_font_ncenB10_tr);
+    u8g2.drawStr(50,12,"CO2");
+    u8g2.setFont(u8g2_font_ncenB08_tr);
+    u8g2.drawStr(50,20,"ppm");
+    u8g2.setFont(u8g2_font_ncenB10_tr);
+    u8g2.setCursor(50,35);
+    u8g2.print(cO2ppm);
+    
+    //Humidity display
+    u8g2.setFont(u8g2_font_ncenB10_tr);
+    u8g2.drawStr(100,12,"Rel");
+    u8g2.setFont(u8g2_font_ncenB08_tr);
+    u8g2.drawStr(100,20,"Hum");
+    u8g2.setFont(u8g2_font_ncenB10_tr);
+    u8g2.setCursor(100,35);
+    u8g2.print(humi);
 
-  display.setCursor(0, 35);
-  display.print("CO2 ppm");
-  display.setCursor(0, 50);
-  display.print(cO2ppm);
+     //CO2 warning display
+    u8g2.setFont(u8g2_font_ncenB12_tr);
 
-  
- 
- if (cO2ppm >= 600 && cO2ppm <= 1500)
+ if (cO2ppm >= 600 && cO2ppm <= 2500)
   {
-
     led(100, 255, 0);
+    u8g2.drawStr(0,60,"CO2 Warning");
   }
-  if (cO2ppm >= 2500)
+  if (cO2ppm > 2500)
   {
     led(0, 255, 0);
+     u8g2.drawStr(0,60,"CO2 HIGH");
   }
   if (cO2ppm < 600)
   {
     led(255, 0, 0);
+     u8g2.drawStr(0,60,"All Normal");
   }
+
+
+
+  } while ( u8g2.nextPage() );
+  //delay(1000);
+
+
+
 }
