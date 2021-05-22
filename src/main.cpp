@@ -8,18 +8,20 @@
 #include <U8g2lib.h>                            
 #include <SoftwareSerial.h>    
 
+//For O2 sensor ADC converter
 Adafruit_ADS1115 ads;  /* Use this for the 16-bit version */
 
-//General Cariable setup
+//General Calibration for O2 setup
 double  calibrationv; //used to store calibrated value
 
- const int8_t RX_PIN = 0;                      // Rx pin which the MHZ19 Tx pin is attached to
- const int8_t TX_PIN = 1;                      // Tx pin which the MHZ19 Rx pin is attached to
 
 //CO2 Sensor
+const int8_t RX_PIN = 0;                      // Rx pin which the MHZ19 Tx pin is attached to
+const int8_t TX_PIN = 1;                      // Tx pin which the MHZ19 Rx pin is attached to
 MHZ19 myMHZ19;
 SoftwareSerial co2Serial(RX_PIN, TX_PIN);                   // (Uno example) create device to MH-Z19 serial
 
+// DHT Humidity and temperature sensor
 #define DHTPIN 3
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
@@ -29,18 +31,18 @@ DHT dht(DHTPIN, DHTTYPE);
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensorsTemp(&oneWire);
 
+//Display Selector
 U8G2_SSD1306_128X64_ALT0_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);   // same as the NONAME variant, but may solve the "every 2nd line skipped" problem
 
-// How many leds in your strip?
+// LED HUD setup
+
 #define NUM_LEDS 2
 #define DATA_PIN 6
-// Define the array of leds
 CRGB leds[NUM_LEDS];
-
-void led(int l, int R, int G, int B)
+void led(int l, int G, int R, int B)
 {
   // Turn the LED on, then pause
-  leds[l] = CRGB(R, G, B);
+  leds[l] = CRGB(G, R, B);
   FastLED.show();
   delay(200);
   leds[l] = CRGB(0, 0, 0);
@@ -48,21 +50,64 @@ void led(int l, int R, int G, int B)
 }
 
 
-//Take 20 readings and avaraging it to exclude minor diviations of the reading
+//O2 sensor calibration function with 30 inputs
 int calibrate(){
   
   int32_t adc0=0;
   int32_t result;
-  for(int i=0; i<=49; i++)
+  for(int i=0; i<=29; i++)
        {
          adc0=adc0+ads.readADC_SingleEnded(0);
       }
-    result=adc0/50;
+    result=adc0/30;
     return result;
 }
 
+
+//*************** DISPLAY FUNCTIONS *****************//
+
+void u8g2_prepare(void) {
+  u8g2.setFont(u8g2_font_6x10_tf);    //Set the font to "u8g2_font_6x10_tf"
+  u8g2.setFontRefHeightExtendedText();//Ascent will be the largest ascent of "A", "1" or "(" of the current font. Descent will be the descent of "g" or "(" of the current font.
+  u8g2.setDrawColor(1);        //Defines the bit value (color index) for all drawing functions. All drawing functions will change the display memory value to this bit value. The default value is 1.
+  u8g2.setFontPosTop();    /*When you use drawStr to display strings, the default criteria is to display the lower-left coordinates of the characters.
+                        XXXX  */
+  u8g2.setFontDirection(0);    //Set the screen orientation: 0 -- for normal display
+}
+
+/*
+ * Draw the grid
+*/
+void grid() {
+
+  u8g2.drawFrame(0,0,u8g2.getDisplayWidth(),u8g2.getDisplayHeight() );//Start drawing an empty box of width w and height h at a coordinate of (0,0)
+  u8g2.drawLine(42,0,42,64);
+  u8g2.drawLine(84,0,84,64);
+  u8g2.drawLine(0,32,128,32);
+  
+}
+
+/*
+ * Draw the Header Texts
+*/
+
+void headerGrids(){
+
+  u8g2.drawStr( 5, 10, "Oxygen %");
+  u8g2.drawStr( 47, 10, "CO2 ppm");
+  u8g2.drawStr( 89, 10, "Rel. Humi");
+  u8g2.drawStr( 5, 42, "Temperature");
+  u8g2.drawStr( 47, 42, "Heat Index");
+  u8g2.drawStr( 89, 42, "Warnings");
+}
+
+
 void setup()
 {
+
+  delay (2000);
+  
+  //Open Serial Port - Remove for production
   Serial.begin(9600);
   
   //For DHT11
@@ -73,9 +118,9 @@ void setup()
   ads.begin();
  
   //FOR CO2 Sensor
-    co2Serial.begin(9600);
-    myMHZ19.begin(co2Serial);
-    myMHZ19.autoCalibration();
+  co2Serial.begin(9600);
+  myMHZ19.begin(co2Serial);
+  myMHZ19.autoCalibration(); //Autocalibration of the MHZ19 JST plus Sensor
     
 
   //for temperature probes
@@ -86,16 +131,19 @@ void setup()
 
   u8g2.begin();  
 
-  
   //O2 sensor calibration
   calibrationv=calibrate();
 
 
+  u8g2_prepare();
+  u8g2.clearBuffer();					// clear the internal memory
+  grid();
+  headerGrids();
+  u8g2.sendBuffer();					// transfer internal memory to the display
+ 
 }
-int progress = 0;
 void loop()
 {
-
 
     int32_t adc0=0;
     double o2Perc;//After calculations holds the current O2 percentage
