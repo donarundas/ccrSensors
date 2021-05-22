@@ -4,69 +4,77 @@
 #include "MHZ19.h"
 #include "DHT.h"
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <SoftwareSerial.h>
 #include <Adafruit_ADS1X15.h>
-#include <U8g2lib.h>
+#include <U8g2lib.h>                            
+#include <SoftwareSerial.h>    
 
+Adafruit_ADS1115 ads;  /* Use this for the 16-bit version */
 
-Adafruit_ADS1015 ads; /* Use thi for the 12-bit version */
+//General Cariable setup
+double  calibrationv; //used to store calibrated value
 
-const int8_t RX_PIN = 10;                      // Rx pin which the MHZ19 Tx pin is attached to
-const int8_t TX_PIN = 11;                      // Tx pin which the MHZ19 Rx pin is attached to
+ const int8_t RX_PIN = 0;                      // Rx pin which the MHZ19 Tx pin is attached to
+ const int8_t TX_PIN = 1;                      // Tx pin which the MHZ19 Rx pin is attached to
 
+//CO2 Sensor
 MHZ19 myMHZ19;
-SoftwareSerial cO2serial(RX_PIN,TX_PIN);
+SoftwareSerial co2Serial(RX_PIN, TX_PIN);                   // (Uno example) create device to MH-Z19 serial
 
-#define DHTPIN 2
+#define DHTPIN 3
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
 //Temperature Probes
-#define ONE_WIRE_BUS 8
+#define ONE_WIRE_BUS 7
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensorsTemp(&oneWire);
 
-//OLED define
-#define SCREEN_WIDTH 100 // OLED display width, in pixels
-#define SCREEN_HEIGHT 50 // OLED display height, in pixels
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-// Adafruit_SSD1306 display(4);
-
-U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
+U8G2_SSD1306_128X64_ALT0_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);   // same as the NONAME variant, but may solve the "every 2nd line skipped" problem
 
 // How many leds in your strip?
-#define NUM_LEDS 1
-#define DATA_PIN 7
+#define NUM_LEDS 2
+#define DATA_PIN 6
 // Define the array of leds
 CRGB leds[NUM_LEDS];
 
-void led(int R, int G, int B)
+void led(int l, int R, int G, int B)
 {
   // Turn the LED on, then pause
-  leds[0] = CRGB(R, G, B);
+  leds[l] = CRGB(R, G, B);
   FastLED.show();
   delay(200);
-  leds[0] = CRGB(0, 0, 0);
+  leds[l] = CRGB(0, 0, 0);
   FastLED.show();
+}
+
+
+//Take 20 readings and avaraging it to exclude minor diviations of the reading
+int calibrate(){
+  
+  int32_t adc0=0;
+  int32_t result;
+  for(int i=0; i<=49; i++)
+       {
+         adc0=adc0+ads.readADC_SingleEnded(0);
+      }
+    result=adc0/50;
+    return result;
 }
 
 void setup()
 {
   Serial.begin(9600);
   
-
   //For DHT11
   dht.begin();
 
   //FOR O2 sensor
   ads.setGain(GAIN_SIXTEEN); // 16x gain  +/- 0.256V  1 bit = 0.125mV  0.0078125mV
   ads.begin();
-
+ 
   //FOR CO2 Sensor
-    cO2serial.begin(9600);
-    myMHZ19.begin(cO2serial);
+    co2Serial.begin(9600);
+    myMHZ19.begin(co2Serial);
     myMHZ19.autoCalibration();
     
 
@@ -75,102 +83,142 @@ void setup()
 
   //for LED
   FastLED.addLeds<WS2812B, DATA_PIN, RGB>(leds, NUM_LEDS); // GRB ordering is typical
-/* 
-  //For OLED I2C
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
-  { // Address 0x3D for 128x64
-    Serial.println(F("SSD1306 allocation failed"));
-    //  for(;;);
-  }
- */
-  u8g2.begin();  
- // display.display(); //Display logo
-//  delay(1000);
- // display.clearDisplay();
-}
 
+  u8g2.begin();  
+
+  
+  //O2 sensor calibration
+  calibrationv=calibrate();
+
+
+}
+int progress = 0;
 void loop()
 {
-  delay(1000);
 
 
-  float humi;
-  float tempC;
-  
-  humi = dht.readHumidity();
-  tempC = dht.readTemperature();
+    int32_t adc0=0;
+    double o2Perc;//After calculations holds the current O2 percentage
+    double currentmv; //the current mv put out by the oxygen sensor;
+    double calibratev;
 
-  int16_t adc0;
-  float O2perc;
-  adc0 = ads.readADC_SingleEnded(0);
-  O2perc = adc0 * 0.0078125 * 22.067;
+    for(int i=0; i<=19; i++)
+       {
+         
+         adc0=adc0+ads.readADC_SingleEnded(0);
+       }
+            
+      currentmv = adc0/20;
+      calibratev=calibrationv;
+    
+     Serial.print("O2 sensor calibration ");                  
+        Serial.print(adc0); Serial.print("  ");   
+         Serial.print(calibratev); Serial.print("  ");  
+           Serial.println(currentmv);  
+     Serial.println("--------------------------"); 
 
-  sensorsTemp.requestTemperatures();
+      o2Perc=(currentmv/calibratev)*20.2;
+    
+      if(o2Perc>99.99){
+        o2Perc=99.99;
+      }
+    
+      if(o2Perc>70.00){
+        led(0,255,0,0);
+      }
+      if(o2Perc<=70.00&&o2Perc>=20){
+        led(0,255,255,0);
+      }
+      if(o2Perc<20.00){
+        led(0,0,255,0);
+      }
 
   int cO2ppm;
   cO2ppm = myMHZ19.getCO2();
 
-   Serial.print("CO2 ppm is: ");
-  Serial.println(cO2ppm);
+ if(myMHZ19.errorCode == RESULT_OK)              // RESULT_OK is an alis for 1. Either can be used to confirm the response was OK.
+        {
+            Serial.print("CO2 Value successfully Recieved: ");
+            Serial.println(cO2ppm);
+            Serial.print("Response Code: ");
+            Serial.println(myMHZ19.errorCode);          // Get the Error Code value
+        }
+
+        else 
+        {
+            Serial.println("Failed to recieve CO2 value - Error");
+            Serial.print("Response Code: ");
+            Serial.println(myMHZ19.errorCode);          // Get the Error Code value
+        }  
+
+        
 
 
-  Serial.print(F("Temperature is: "));
-  Serial.println(sensorsTemp.getTempCByIndex(0));
-  Serial.print(F("Temperature is: "));
-  Serial.println(sensorsTemp.getTempCByIndex(1));
 
-   
-  u8g2.firstPage();
-  do {
-    //O2 display
-    u8g2.setFont(u8g2_font_ncenB14_tr);
-    u8g2.drawStr(0,16,"O2 %");
-    u8g2.setFont(u8g2_font_ncenB10_tr);
-    u8g2.setCursor(0,35);
-    u8g2.print(O2perc);
 
-    //CO2 display
-    u8g2.setFont(u8g2_font_ncenB10_tr);
-    u8g2.drawStr(50,12,"CO2");
-    u8g2.setFont(u8g2_font_ncenB08_tr);
-    u8g2.drawStr(50,20,"ppm");
-    u8g2.setFont(u8g2_font_ncenB10_tr);
-    u8g2.setCursor(50,35);
-    u8g2.print(cO2ppm);
+
     
-    //Humidity display
-    u8g2.setFont(u8g2_font_ncenB10_tr);
-    u8g2.drawStr(100,12,"Rel");
-    u8g2.setFont(u8g2_font_ncenB08_tr);
-    u8g2.drawStr(100,20,"Hum");
-    u8g2.setFont(u8g2_font_ncenB10_tr);
-    u8g2.setCursor(100,35);
-    u8g2.print(humi);
-
-     //CO2 warning display
-    u8g2.setFont(u8g2_font_ncenB12_tr);
-
- if (cO2ppm >= 600 && cO2ppm <= 2500)
-  {
-    led(100, 255, 0);
-    u8g2.drawStr(0,60,"CO2 Warning");
-  }
-  if (cO2ppm > 2500)
-  {
-    led(0, 255, 0);
-     u8g2.drawStr(0,60,"CO2 HIGH");
-  }
-  if (cO2ppm < 600)
-  {
-    led(255, 0, 0);
-     u8g2.drawStr(0,60,"All Normal");
-  }
+      if(cO2ppm<1000){
+        led(1,255,0,0);
+      }
+      if(cO2ppm<=2000.00&&cO2ppm>=1000){
+        led(1,255,255,0);
+      }
+      if(cO2ppm>2000){
+        led(1,0,255,0);
+      }
 
 
+  static char outco2[15];
+  static char outo2[15];
+  static char outhumi[15];
+  static char outheati[15];
+  static char outtemp[15];
+ 
+  
+  float humi = dht.readHumidity();
+  float tempC = dht.readTemperature();
+  float heatIndex = dht.computeHeatIndex(tempC, humi, false);
 
-  } while ( u8g2.nextPage() );
-  //delay(1000);
+  sensorsTemp.requestTemperatures();
+
+  dtostrf(cO2ppm,5,0,outco2);
+  dtostrf(o2Perc,5,2,outo2);
+  dtostrf(humi,5,2,outhumi);
+  dtostrf(tempC,5,2,outtemp);
+  dtostrf(heatIndex,5,2,outheati);
+
+     Serial.print("Temperature (C) from DHT11: ");                  
+        Serial.print(tempC); Serial.print("  ");   Serial.println(outtemp);  
+     Serial.println("--------------------------"); 
+
+     Serial.print("CO2 ppm ");                  
+        Serial.print(cO2ppm);  Serial.print("  ");  Serial.println(outco2);  
+     Serial.println("--------------------------");    
+
+     Serial.print("O2 % ");                  
+        Serial.print(o2Perc);  Serial.print("  ");  Serial.println(outo2);  
+     Serial.println("--------------------------");    
+
+     Serial.print("Humidity from DHT 11 ");                  
+        Serial.print(humi);  Serial.print("  ");  Serial.println(outhumi);  
+     Serial.println("--------------------------");    
+
+     Serial.print("Heat Index from DHT 11 ");                  
+        Serial.print(heatIndex);  Serial.print("  "); Serial.println(outheati);  
+     Serial.println("--------------------------");    
+ 
+  u8g2.clearBuffer();					// clear the internal memory
+  u8g2.setFont(u8g2_font_ncenB08_tr);	// choose a suitable font
+  u8g2.drawStr(0,10,outco2);	// write something to the internal memory
+  u8g2.drawStr(50,20,outo2);	// write something to the internal memory
+  u8g2.drawStr(0,30,outhumi);	// write something to the internal memory
+  u8g2.drawStr(50,40,outtemp);	// write something to the internal memory
+  u8g2.drawStr(0,50,outheati);	// write something to the internal memory
 
 
+  u8g2.sendBuffer();					// transfer internal memory to the display
+ 
+  delay(1000); 
 
 }
