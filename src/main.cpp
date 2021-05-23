@@ -32,8 +32,8 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensorsTemp(&oneWire);
 
 //Display Selector
-U8G2_SSD1306_128X64_ALT0_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);   // same as the NONAME variant, but may solve the "every 2nd line skipped" problem
-
+//U8G2_SSD1306_128X64_ALT0_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);   // same as the NONAME variant, but may solve the "every 2nd line skipped" problem
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 // LED HUD setup
 
 #define NUM_LEDS 2
@@ -53,13 +53,20 @@ void led(int l, int G, int R, int B)
 //O2 sensor calibration function with 30 inputs
 int calibrate(){
   
-  int32_t adc0=0;
-  int32_t result;
-  for(int i=0; i<=29; i++)
+  int16_t adc0=0;
+  int16_t result;
+  Serial.print("O2 sensor calibration ");  
+  for(int i=0; i<=9; i++)
        {
          adc0=adc0+ads.readADC_SingleEnded(0);
+        
+                     
+        Serial.print(adc0); Serial.print(" - ");   
+
       }
-    result=adc0/30;
+      
+     Serial.println("--------------------------"); 
+    result=adc0/10;
     return result;
 }
 
@@ -67,12 +74,13 @@ int calibrate(){
 //*************** DISPLAY FUNCTIONS *****************//
 
 void u8g2_prepare(void) {
-  u8g2.setFont(u8g2_font_6x10_tf);    //Set the font to "u8g2_font_6x10_tf"
+ 
   u8g2.setFontRefHeightExtendedText();//Ascent will be the largest ascent of "A", "1" or "(" of the current font. Descent will be the descent of "g" or "(" of the current font.
   u8g2.setDrawColor(1);        //Defines the bit value (color index) for all drawing functions. All drawing functions will change the display memory value to this bit value. The default value is 1.
   u8g2.setFontPosTop();    /*When you use drawStr to display strings, the default criteria is to display the lower-left coordinates of the characters.
                         XXXX  */
   u8g2.setFontDirection(0);    //Set the screen orientation: 0 -- for normal display
+    
 }
 
 /*
@@ -81,10 +89,10 @@ void u8g2_prepare(void) {
 void grid() {
 
   u8g2.drawFrame(0,0,u8g2.getDisplayWidth(),u8g2.getDisplayHeight() );//Start drawing an empty box of width w and height h at a coordinate of (0,0)
-  u8g2.drawLine(42,0,42,64);
-  u8g2.drawLine(84,0,84,64);
-  u8g2.drawLine(0,32,128,32);
-  
+  u8g2.drawLine(50,0,50,64);
+  u8g2.drawLine(50,21,128,21);
+  u8g2.drawLine(50,42,128,42);
+  u8g2.drawLine(0,32,50,32);
 }
 
 /*
@@ -93,13 +101,17 @@ void grid() {
 
 void headerGrids(){
 
-  u8g2.drawStr( 5, 10, "Oxygen %");
-  u8g2.drawStr( 47, 10, "CO2 ppm");
-  u8g2.drawStr( 89, 10, "Rel. Humi");
-  u8g2.drawStr( 5, 42, "Temperature");
-  u8g2.drawStr( 47, 42, "Heat Index");
-  u8g2.drawStr( 89, 42, "Warnings");
+  u8g2.drawStr( 1, 0, "O2 %");
+  u8g2.drawStr( 55, 0, "CO2 ppm");
+  u8g2.drawStr( 55, 43, "Rel. Humi");
+  u8g2.drawStr( 55, 22, "Temperature");
+ // u8g2.drawStr( 47, 34, "Heat Index");
+  u8g2.drawStr( 1, 33, "Check:");
 }
+
+
+
+
 
 
 void setup()
@@ -129,40 +141,40 @@ void setup()
   //for LED
   FastLED.addLeds<WS2812B, DATA_PIN, RGB>(leds, NUM_LEDS); // GRB ordering is typical
 
-  u8g2.begin();  
+ // u8g2.begin();  
 
-  //O2 sensor calibration
-  calibrationv=calibrate();
 
 
   u8g2_prepare();
-  u8g2.clearBuffer();					// clear the internal memory
-  grid();
-  headerGrids();
-  u8g2.sendBuffer();					// transfer internal memory to the display
+
  
+  //O2 sensor calibration
+  calibrationv=calibrate();
+
 }
 void loop()
 {
 
+delay(2000);
     int32_t adc0=0;
     double o2Perc;//After calculations holds the current O2 percentage
     double currentmv; //the current mv put out by the oxygen sensor;
     double calibratev;
 
-    for(int i=0; i<=19; i++)
+ Serial.print("O2 sensor readings post");  
+
+    for(int i=0; i<=9; i++)
        {
          
          adc0=adc0+ads.readADC_SingleEnded(0);
+          Serial.print(adc0); Serial.print("  ");   
        }
             
-      currentmv = adc0/20;
+      currentmv = adc0/10;
       calibratev=calibrationv;
     
-     Serial.print("O2 sensor calibration ");                  
-        Serial.print(adc0); Serial.print("  ");   
-         Serial.print(calibratev); Serial.print("  ");  
-           Serial.println(currentmv);  
+                    
+      
      Serial.println("--------------------------"); 
 
       o2Perc=(currentmv/calibratev)*20.2;
@@ -256,14 +268,20 @@ void loop()
         Serial.print(heatIndex);  Serial.print("  "); Serial.println(outheati);  
      Serial.println("--------------------------");    
  
-  u8g2.clearBuffer();					// clear the internal memory
-  u8g2.setFont(u8g2_font_ncenB08_tr);	// choose a suitable font
-  u8g2.drawStr(0,10,outco2);	// write something to the internal memory
-  u8g2.drawStr(50,20,outo2);	// write something to the internal memory
-  u8g2.drawStr(0,30,outhumi);	// write something to the internal memory
-  u8g2.drawStr(50,40,outtemp);	// write something to the internal memory
-  u8g2.drawStr(0,50,outheati);	// write something to the internal memory
 
+   u8g2.clearBuffer();					// clear the internal memory
+   u8g2.setFont(u8g2_font_courB08_tf);    //Set the font to "u8g2_font_courB12_tf"
+    grid();
+    headerGrids();
+  
+  u8g2.drawStr(55,11,outco2);	// write something to the internal memory
+  u8g2.drawStr(55,52,outhumi);	// write something to the internal memory
+  u8g2.drawStr(55,32,outtemp);	// write something to the internal memory
+ // u8g2.drawStr(0,50,outheati);	// write something to the internal memory
+  
+  u8g2.setFont(u8g2_font_courB12_tf); 
+  u8g2.drawStr(1,10,outo2);	// write something to the internal memory
+ // u8g2.drawStr(1,45,"CO2");	// write something to the internal memory
 
   u8g2.sendBuffer();					// transfer internal memory to the display
  
