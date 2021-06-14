@@ -7,12 +7,17 @@
 #include <Adafruit_ADS1X15.h>
 #include <U8g2lib.h>                            
 #include <SoftwareSerial.h>    
+#include <SPI.h>
+#include <SD.h>
 
 //For O2 sensor ADC converter
 Adafruit_ADS1115 ads;  /* Use this for the 16-bit version */
 
 //General Calibration for O2 setup
-double  calibrationv; //used to store calibrated value
+#define o2sensors 1
+double  calibrationv[o2sensors]={0}; //used to store calibrated value
+int8_t calCheck[o2sensors]={0};
+double calibratev[o2sensors]={0};
 
 
 //CO2 Sensor
@@ -39,6 +44,12 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 #define NUM_LEDS 2
 #define DATA_PIN 6
 CRGB leds[NUM_LEDS];
+
+
+File myDataFile;
+File myDataFile2;
+
+
 void led(int l, int G, int R, int B)
 {
   // Turn the LED on, then pause
@@ -51,22 +62,31 @@ void led(int l, int G, int R, int B)
 
 
 //O2 sensor calibration function with 30 inputs
-int calibrate(){
+int calibrate(int8_t sensor){
   
-  int16_t adc0=0;
-  int16_t result;
-  Serial.print("O2 sensor calibration ");  
-  for(int i=0; i<=9; i++)
-       {
-         adc0=adc0+ads.readADC_SingleEnded(0);
-        
-                     
-        Serial.print(adc0); Serial.print(" - ");   
+  int32_t adc=0;
+  int32_t result;
 
+  Serial.println("------------------------------- ");
+  Serial.print("Calibratioin in Progress for Sensor ");Serial.println(sensor);
+  Serial.println("------------------------------- ");
+     for(int i=0; i<=29; i++)
+       {
+         delay(100);
+         adc=adc+ads.readADC_SingleEnded(sensor);
+         Serial.print(i); Serial.print(" - ");Serial.print(adc);
       }
-      
-     Serial.println("--------------------------"); 
-    result=adc0/10;
+
+ Serial.println("------------------------------- ");
+  Serial.print("Calibratioin Completed for Sensor ");Serial.println(sensor);
+  Serial.println("------------------------------- ");
+
+   Serial.print("ADC Value is: ");Serial.println(adc);
+
+
+    result=adc/30;
+    calCheck[sensor]=1;
+
     return result;
 }
 
@@ -108,6 +128,15 @@ void headerGrids(){
  // u8g2.drawStr( 47, 34, "Heat Index");
   u8g2.drawStr( 1, 33, "Check:");
 }
+void headerGrids1(){
+
+  u8g2.drawStr( 1, 0, "O2 - 1 %");
+  u8g2.drawStr( 55, 0, "CO2 ppm");
+  u8g2.drawStr( 55, 43, "Rel. Humi");
+  u8g2.drawStr( 55, 22, "Temperature");
+ // u8g2.drawStr( 47, 34, "Heat Index");
+  u8g2.drawStr( 1, 33, "O2 - 2 %");
+}
 
 
 
@@ -121,7 +150,16 @@ void setup()
   
   //Open Serial Port - Remove for production
   Serial.begin(9600);
-  
+
+
+  Serial.print("Initializing SD card...");
+
+  if (!SD.begin(2)) {
+    Serial.println("initialization failed!");
+    while (1);
+  }
+  Serial.println("initialization done.");
+
   //For DHT11
   dht.begin();
 
@@ -141,96 +179,107 @@ void setup()
   //for LED
   FastLED.addLeds<WS2812B, DATA_PIN, RGB>(leds, NUM_LEDS); // GRB ordering is typical
 
- // u8g2.begin();  
+  u8g2.begin();  
 
 
 
   u8g2_prepare();
 
  
+ 
+  // open the file. note that only one file can be open at a time,
+  // so you have to close this one before opening another.
+  myDataFile = SD.open("test.txt", FILE_WRITE);
+// if the file opened okay, write to it:
+  if (myDataFile) {
+    Serial.print("Writing to Data Logger.txt...");
+    myDataFile.println("Initializing Control Systems");
+    myDataFile.println("Starting Calibration and Data Recording");
+    myDataFile.println("v1.0");
+    myDataFile.println("Copyright Reb-Tek");
+    myDataFile.println("----------------------------");
+    myDataFile.println("");
+    myDataFile.println("");
+    myDataFile.println("");
+    myDataFile.close();
+
+    Serial.println("done.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening Data Logger.txt");
+  }
+
   //O2 sensor calibration
-  calibrationv=calibrate();
+//  calibrationv=calibrate();
 
 }
 void loop()
 {
+// make a string for assembling the data to log:
+  String dataString = "";
 
-delay(2000);
-    int32_t adc0=0;
-    double o2Perc;//After calculations holds the current O2 percentage
-    double currentmv; //the current mv put out by the oxygen sensor;
-    double calibratev;
+    int32_t adc[o2sensors]={0};
+    double o2Perc[o2sensors]={0};//After calculations holds the current O2 percentage
+    double currentmv[o2sensors]={0}; //the current mv put out by the oxygen sensor;
 
- Serial.print("O2 sensor readings post");  
 
-    for(int i=0; i<=9; i++)
+    for(int i=0; i<o2sensors; i++)
        {
-         
-         adc0=adc0+ads.readADC_SingleEnded(0);
-          Serial.print(adc0); Serial.print("  ");   
-       }
-            
-      currentmv = adc0/10;
-      calibratev=calibrationv;
-    
-                    
-      
-     Serial.println("--------------------------"); 
+         for(int j=0; j<=19;j++){
 
-      o2Perc=(currentmv/calibratev)*20.2;
-    
-      if(o2Perc>99.99){
-        o2Perc=99.99;
-      }
-    
-      if(o2Perc>70.00){
-        led(0,255,0,0);
-      }
-      if(o2Perc<=70.00&&o2Perc>=20){
-        led(0,255,255,0);
-      }
-      if(o2Perc<20.00){
-        led(0,0,255,0);
-      }
+              adc[i]=adc[i]+ads.readADC_SingleEnded(i);
+              
+              Serial.print(" adc");Serial.print(i);Serial.print(" : ");Serial.print(adc[i]);
+         }
+        Serial.println("------------------------------- ");
+        currentmv[i] = adc[i]/20;
+        calibratev[i]=calibrationv[i];
+        o2Perc[i]=(currentmv[i]/calibratev[i])*20.9;
 
-  int cO2ppm;
-  cO2ppm = myMHZ19.getCO2();
-
- if(myMHZ19.errorCode == RESULT_OK)              // RESULT_OK is an alis for 1. Either can be used to confirm the response was OK.
-        {
-            Serial.print("CO2 Value successfully Recieved: ");
-            Serial.println(cO2ppm);
-            Serial.print("Response Code: ");
-            Serial.println(myMHZ19.errorCode);          // Get the Error Code value
-        }
-
-        else 
-        {
-            Serial.println("Failed to recieve CO2 value - Error");
-            Serial.print("Response Code: ");
-            Serial.println(myMHZ19.errorCode);          // Get the Error Code value
-        }  
+        Serial.println("O2 sensor Calculation:");
+        Serial.print("Sensor Reading - ");Serial.print(currentmv[i]);
+        Serial.print("- Calibrated Value - ");Serial.print(calibratev[i]);Serial.print("- ");
+        Serial.print("- O2 %age - ");Serial.println(o2Perc[i]);
 
         
+        if(o2Perc[i]>99.99){
+        o2Perc[i]=99.99;
+
+        if(o2Perc[i]>70.00){
+        led(i,255,0,0);
+        }
+        
+        if(o2Perc[i]<=70.00&&o2Perc[i]>=20){
+        led(i,255,255,0);
+        }
+        if(o2Perc[i]<20.00){
+        led(i,0,255,0);
+        }
 
 
+        }
+          
+        }
 
-
-
+     
     
+     
+  int cO2ppm;
+  cO2ppm = myMHZ19.getCO2();
+ 
       if(cO2ppm<1000){
-        led(1,255,0,0);
+        led(2,255,0,0);
       }
-      if(cO2ppm<=2000.00&&cO2ppm>=1000){
-        led(1,255,255,0);
+      if(cO2ppm<=2000&&cO2ppm>=1000){
+        led(2,255,255,0);
       }
       if(cO2ppm>2000){
-        led(1,0,255,0);
+        led(2,0,255,0);
       }
 
 
   static char outco2[15];
-  static char outo2[15];
+  static char outo2[o2sensors][15];
   static char outhumi[15];
   static char outheati[15];
   static char outtemp[15];
@@ -243,48 +292,92 @@ delay(2000);
   sensorsTemp.requestTemperatures();
 
   dtostrf(cO2ppm,5,0,outco2);
-  dtostrf(o2Perc,5,2,outo2);
+  
+  dataString += outco2;
+  dataString += ",";
+
   dtostrf(humi,5,2,outhumi);
+  dataString += outhumi;
+  dataString += ",";
+
   dtostrf(tempC,5,2,outtemp);
+  dataString += outtemp;
+  dataString += ",";
+
   dtostrf(heatIndex,5,2,outheati);
+  dataString += outheati;
+  dataString += ",";
 
-     Serial.print("Temperature (C) from DHT11: ");                  
-        Serial.print(tempC); Serial.print("  ");   Serial.println(outtemp);  
-     Serial.println("--------------------------"); 
-
-     Serial.print("CO2 ppm ");                  
-        Serial.print(cO2ppm);  Serial.print("  ");  Serial.println(outco2);  
-     Serial.println("--------------------------");    
-
-     Serial.print("O2 % ");                  
-        Serial.print(o2Perc);  Serial.print("  ");  Serial.println(outo2);  
-     Serial.println("--------------------------");    
-
-     Serial.print("Humidity from DHT 11 ");                  
-        Serial.print(humi);  Serial.print("  ");  Serial.println(outhumi);  
-     Serial.println("--------------------------");    
-
-     Serial.print("Heat Index from DHT 11 ");                  
-        Serial.print(heatIndex);  Serial.print("  "); Serial.println(outheati);  
-     Serial.println("--------------------------");    
- 
+  dtostrf(o2Perc[0],5,2,outo2[0]);
+  dataString += outo2[0];
+  dataString += ",";
+  
 
    u8g2.clearBuffer();					// clear the internal memory
    u8g2.setFont(u8g2_font_courB08_tf);    //Set the font to "u8g2_font_courB12_tf"
     grid();
-    headerGrids();
+    
+
   
   u8g2.drawStr(55,11,outco2);	// write something to the internal memory
   u8g2.drawStr(55,52,outhumi);	// write something to the internal memory
   u8g2.drawStr(55,32,outtemp);	// write something to the internal memory
- // u8g2.drawStr(0,50,outheati);	// write something to the internal memory
+
   
   u8g2.setFont(u8g2_font_courB12_tf); 
-  u8g2.drawStr(1,10,outo2);	// write something to the internal memory
- // u8g2.drawStr(1,45,"CO2");	// write something to the internal memory
+  u8g2.drawStr(1,10,outo2[0]);	// write something to the internal memory
+
+  if(o2sensors>1){
+    for(int i=1;i<o2sensors;i++){
+      dtostrf(o2Perc[i],5,2,outo2[i]);
+      
+  dataString += outo2[i];
+  dataString += ",";
+      
+      u8g2.drawStr(1,42,outo2[1]);	// write something to the internal memory
+
+       u8g2.setFont(u8g2_font_courB08_tf);
+      headerGrids1();
+      }
+  }
+  else{
+     u8g2.setFont(u8g2_font_courB08_tf);
+      headerGrids();
+  }
+  
+
+  
+  myDataFile2 = SD.open("log.txt", FILE_WRITE);
+  // if the file opened okay, write to it:
+  if (myDataFile2) {
+    Serial.print("Writing to test.txt...");
+    myDataFile2.print(dataString); 
+    myDataFile2.println("..");
+    // Flush the file:
+    myDataFile2.close();
+    Serial.println("done.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening test.txt");
+  }
+
+
+
+
 
   u8g2.sendBuffer();					// transfer internal memory to the display
  
-  delay(1000); 
+ for(int i=0; i<o2sensors; i++){
+  if(calCheck[i]!=1){
+    
+  //O2 sensor calibration
+  calibrationv[i]=calibrate(i);
+
+  }
+ }
+
+
+
+  delay(500);  
 
 }
